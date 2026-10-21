@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*git commit*)",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/roadmap-check.py\"",
+            "statusMessage": "Checking ROADMAP.md is up to date..."
+          }
+        ]
+      }
+    ]
+  }
+}
