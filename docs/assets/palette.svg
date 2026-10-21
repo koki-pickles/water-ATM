@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="170" viewBox="0 0 1000 170" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1000" height="170" fill="#FFFFFF"/>
+  <g font-size="13">
+    <rect x="20"  y="20" width="110" height="100" rx="12" fill="#E8F1FB" stroke="#BBD7F5"/>
+    <text x="75"  y="75" text-anchor="middle" fill="#082E66" font-weight="700">Mist</text>
+    <text x="75"  y="145" text-anchor="middle" fill="#082E66">#E8F1FB</text>
+
+    <rect x="140" y="20" width="110" height="100" rx="12" fill="#BBD7F5"/>
+    <text x="195" y="75" text-anchor="middle" fill="#082E66" font-weight="700">Sky</text>
+    <text x="195" y="145" text-anchor="middle" fill="#082E66">#BBD7F5</text>
+
+    <rect x="260" y="20" width="110" height="100" rx="12" fill="#7FB3EA"/>
+    <text x="315" y="75" text-anchor="middle" fill="#041A3D" font-weight="700">Splash</text>
+    <text x="315" y="145" text-anchor="middle" fill="#082E66">#7FB3EA</text>
+
+    <rect x="380" y="20" width="110" height="100" rx="12" fill="#3D8BDB"/>
+    <text x="435" y="75" text-anchor="middle" fill="#FFFFFF" font-weight="700">Stream</text>
+    <text x="435" y="145" text-anchor="middle" fill="#082E66">#3D8BDB</text>
+
+    <rect x="500" y="20" width="110" height="100" rx="12" fill="#1565C0"/>
+    <text x="555" y="75" text-anchor="middle" fill="#FFFFFF" font-weight="700">Primary</text>
+    <text x="555" y="145" text-anchor="middle" fill="#082E66">#1565C0</text>
+
+    <rect x="620" y="20" width="110" height="100" rx="12" fill="#0D47A1"/>
+    <text x="675" y="75" text-anchor="middle" fill="#FFFFFF" font-weight="700">Deep</text>
+    <text x="675" y="145" text-anchor="middle" fill="#082E66">#0D47A1</text>
+
+    <rect x="740" y="20" width="110" height="100" rx="12" fill="#082E66"/>
+    <text x="795" y="75" text-anchor="middle" fill="#FFFFFF" font-weight="700">Ocean</text>
+    <text x="795" y="145" text-anchor="middle" fill="#082E66">#082E66</text>
+
+    <rect x="860" y="20" width="110" height="100" rx="12" fill="#041A3D"/>
+    <text x="915" y="75" text-anchor="middle" fill="#FFFFFF" font-weight="700">Abyss</text>
+    <text x="915" y="145" text-anchor="middle" fill="#082E66">#041A3D</text>
+  </g>
+</svg>
