@@ -472,7 +472,10 @@ gantt
 - [x] 🤖 Safety: wrong amount → held for review; money arriving after cancel → flagged for refund
 - [x] 🤖 Basic orders API (`POST /api/orders`, `POST /api/orders/{id}/payment`, `GET /api/orders/{id}`)
 - [x] 🤖 Keys in a private `backend/.env` file + cloudflared tunnel installed
-- [ ] 🤝 You test with real sandbox keys: [`docs/SETUP.md` §4](docs/SETUP.md#4-m-pesa-sandbox-test-money)
+- [x] 🤝 First real sandbox test (21 Oct): Safaricom accepted the STK push; no callback came for the
+      unanswered prompt (sandbox result 1037 "No response from user"); expiry job closed it after 5 min
+- [ ] 🤖 **Before expiring, ask Safaricom (STK Query API)**: a lost "paid" callback must never cancel a paid order
+- [ ] 🤝 Test with a real Safaricom number (PIN prompt on a phone)
 
 ### Phase 3a: WhatsApp bot *(weeks 2–3, parallel)*
 - [ ] 🤖 Webhook verify + echo bot
