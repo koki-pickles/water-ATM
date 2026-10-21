@@ -449,7 +449,7 @@ gantt
 **Who:** 🧑🏾 = you  ·  🤖 = Claude (code)  ·  🤝 = together
 
 ### Phase 0: Kick-off *(this week)*
-- [ ] 🧑🏾 Create a **Daraja developer account** (sandbox, free): developer.safaricom.co.ke
+- [x] 🧑🏾 Create a **Daraja developer account** (sandbox, free): developer.safaricom.co.ke
 - [ ] 🧑🏾 Create a **Meta developer account** + WhatsApp Cloud API test number
 - [ ] 🧑🏾 Start **business registration** + **Paybill/Till** application (see [§11](#11-things-only-you-can-do))
 - [ ] 🧑🏾 Install Docker + **Expo Go** on your iPhone (Android Studio optional, for an Android emulator)
@@ -471,6 +471,7 @@ gantt
 - [x] 🤖 Timeout job: no answer in 5 min → payment expired; unpaid after 30 min → order cancelled
 - [x] 🤖 Safety: wrong amount → held for review; money arriving after cancel → flagged for refund
 - [x] 🤖 Basic orders API (`POST /api/orders`, `POST /api/orders/{id}/payment`, `GET /api/orders/{id}`)
+- [x] 🤖 Keys in a private `backend/.env` file + cloudflared tunnel installed
 - [ ] 🤝 You test with real sandbox keys: [`docs/SETUP.md` §4](docs/SETUP.md#4-m-pesa-sandbox-test-money)
 
 ### Phase 3a: WhatsApp bot *(weeks 2–3, parallel)*

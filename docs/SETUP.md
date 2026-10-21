@@ -50,31 +50,39 @@ curl -X POST localhost:8080/api/orders -H 'Content-Type: application/json' \
 
 ## 4. M-Pesa sandbox (test money)
 
-1. Create an account at https://developer.safaricom.co.ke, then **My Apps → Add a new app** and tick
-   **M-Pesa Sandbox**. Copy the **Consumer Key** and **Consumer Secret**.
-2. M-Pesa must be able to reach your laptop for the callback. Install a tunnel such as
-   [ngrok](https://ngrok.com) and run `ngrok http 8080`. It gives you a URL like `https://abc123.ngrok.app`.
-3. Start the app with your keys. Use environment variables so the keys **never go into git**:
+1. **Keys:** at https://developer.safaricom.co.ke, open **My Apps** and pick your app. Copy the
+   **Consumer Key** and **Consumer Secret**.
+2. **Private settings file:** copy the example and fill in your keys. `backend/.env` is ignored by git,
+   so your keys never leave your laptop.
 
    ```bash
-   export MPESA_CONSUMER_KEY=...your key...
-   export MPESA_CONSUMER_SECRET=...your secret...
-   export MPESA_CALLBACK_BASE_URL=https://abc123.ngrok.app
-   export MPESA_CALLBACK_SECRET=$(openssl rand -hex 16)
-   ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+   cd backend
+   cp .env.example .env
    ```
 
-   The sandbox shortcode `174379` and its passkey are already the defaults. Check that they still match
-   the "Lipa Na M-Pesa Online" test credentials shown in the Daraja portal.
-4. Place an order (see above), then ask for payment with the order `id` it returns:
+   For `MPESA_CALLBACK_SECRET`, paste the output of `openssl rand -hex 16`.
+3. **Tunnel**, so Safaricom can reach your laptop. In a separate terminal:
 
    ```bash
+   cloudflared tunnel --url http://localhost:8080
+   ```
+
+   It prints a URL like `https://something-random.trycloudflare.com`. Put it in `.env` as
+   `MPESA_CALLBACK_BASE_URL` (no slash at the end). The URL changes each time you restart cloudflared,
+   so update `.env` when that happens.
+4. **Start the app** with the demo shop: `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev`
+5. **Place an order and pay** (use the phone that should get the PIN prompt):
+
+   ```bash
+   curl -X POST localhost:8080/api/orders -H 'Content-Type: application/json' \
+     -d '{"phone":"07XXXXXXXX","jerrycans":2,"lat":-1.2870,"lng":36.8180}'
    curl -X POST localhost:8080/api/orders/<order-id>/payment
-   curl localhost:8080/api/orders/<order-id>      # status becomes PAID after the callback
+   curl localhost:8080/api/orders/<order-id>      # PAID after you enter the PIN
    ```
 
-   In the sandbox, the prompt goes to the phone number in the order only if it is a Safaricom test-enabled
-   number. Use the test MSISDN shown in the Daraja portal's simulator if your own number gets no prompt.
+   The sandbox can send real prompts to Safaricom numbers, but **no real money moves**. Without a
+   Safaricom line, the prompt never arrives. M-Pesa then calls back with a timeout, and the payment
+   shows as FAILED. That still proves the whole round trip works.
 
 > ⚠️ The orders API has **no login yet**. Never run it on a public server until Phase 3b adds login.
 
