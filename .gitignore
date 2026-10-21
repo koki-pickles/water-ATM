@@ -1,0 +1,14 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Secrets (keys go in environment variables, never in git)
+.env
+*.env.local
+
+# Mobile app (later)
+node_modules/
