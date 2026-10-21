@@ -14,7 +14,9 @@ import ke.wateratm.application.port.in.RequestPaymentUseCase;
 import ke.wateratm.application.port.out.CustomerRepositoryPort;
 import ke.wateratm.application.port.out.OrderRepositoryPort;
 import ke.wateratm.application.port.out.PaymentGatewayPort;
+import ke.wateratm.application.port.out.PaymentGatewayPort.PaymentGatewayException;
 import ke.wateratm.application.port.out.PaymentGatewayPort.StkPushRequest;
+import ke.wateratm.application.port.out.PaymentGatewayPort.StkStatus;
 import ke.wateratm.application.port.out.PaymentRepositoryPort;
 import ke.wateratm.domain.exception.OrderNotFoundException;
 import ke.wateratm.domain.exception.PaymentNotAllowedException;
@@ -25,8 +27,11 @@ import ke.wateratm.domain.model.PaymentStatus;
 
 public class PaymentService implements RequestPaymentUseCase, HandlePaymentResultUseCase, ExpireStalePaymentsUseCase {
 
-	/** The PIN prompt on the phone disappears after about a minute; we wait a bit longer. */
+	/** The PIN prompt on the phone disappears after about a minute; after this we ask M-Pesa what happened. */
 	static final Duration PAYMENT_TIMEOUT = Duration.ofMinutes(5);
+
+	/** If M-Pesa still can't tell us after this long, we stop asking. */
+	static final Duration PAYMENT_GIVE_UP = Duration.ofMinutes(60);
 
 	/** Customers can retry a failed payment; after this the unpaid order is cancelled. */
 	static final Duration UNPAID_ORDER_TIMEOUT = Duration.ofMinutes(30);
@@ -80,26 +85,34 @@ public class PaymentService implements RequestPaymentUseCase, HandlePaymentResul
 		}
 		Payment payment = found.get();
 		if (!payment.isAwaitingCallback()) {
-			// M-Pesa sometimes sends the same result twice. We already handled it.
+			// M-Pesa sometimes sends the same result twice, or a status query got there first.
+			if (result.successful()) {
+				payment.attachLateReceipt(result.receipt());
+				payments.save(payment);
+			}
 			return;
 		}
-		Order order = orders.findByIdForUpdate(payment.orderId())
-			.orElseThrow(() -> new OrderNotFoundException(payment.orderId()));
-
 		if (result.successful()) {
-			payment.recordSuccess(result.receipt(), result.amountKes(), order.isAwaitingPayment());
-			if (payment.status() == PaymentStatus.SUCCEEDED) {
-				order.markPaid();
-				orders.save(order);
-			}
-			else {
-				LOG.log(Level.ERROR, "Payment {0} needs a human: {1}", payment.id(), payment.resultDescription());
-			}
+			// No amount in a "success" is suspicious: -1 makes it an AMOUNT_MISMATCH for a human to check.
+			recordSuccess(payment, result.receipt(), result.amountKes() == null ? -1 : result.amountKes());
 		}
 		else {
 			payment.recordFailure(result.description());
 		}
 		payments.save(payment);
+	}
+
+	private void recordSuccess(Payment payment, String receipt, int amountKes) {
+		Order order = orders.findByIdForUpdate(payment.orderId())
+			.orElseThrow(() -> new OrderNotFoundException(payment.orderId()));
+		payment.recordSuccess(receipt, amountKes, order.isAwaitingPayment());
+		if (payment.status() == PaymentStatus.SUCCEEDED) {
+			order.markPaid();
+			orders.save(order);
+		}
+		else {
+			LOG.log(Level.ERROR, "Payment {0} needs a human: {1}", payment.id(), payment.resultDescription());
+		}
 	}
 
 	@Override
@@ -110,8 +123,7 @@ public class PaymentService implements RequestPaymentUseCase, HandlePaymentResul
 		for (Payment stale : payments.findPendingCreatedBefore(now.minus(PAYMENT_TIMEOUT))) {
 			// Re-read with a lock: a callback may have arrived since the list was loaded.
 			Payment payment = payments.findByCheckoutRequestIdForUpdate(stale.checkoutRequestId()).orElseThrow();
-			if (payment.isPending()) {
-				payment.expire();
+			if (payment.isPending() && settleWithoutCallback(payment, now)) {
 				payments.save(payment);
 				closed++;
 			}
@@ -126,6 +138,34 @@ public class PaymentService implements RequestPaymentUseCase, HandlePaymentResul
 			}
 		}
 		return closed;
+	}
+
+	/**
+	 * The callback never came. Ask M-Pesa before giving up, so a lost "paid" message can
+	 * never cancel an order the customer really paid for.
+	 * @return true if the payment is now settled
+	 */
+	private boolean settleWithoutCallback(Payment payment, Instant now) {
+		StkStatus status;
+		try {
+			status = gateway.queryStatus(payment.checkoutRequestId());
+		}
+		catch (PaymentGatewayException ex) {
+			status = new StkStatus(StkStatus.State.STILL_PROCESSING, "M-Pesa unreachable: " + ex.getMessage());
+		}
+		switch (status.state()) {
+			case PAID -> recordSuccess(payment, null, payment.amountKes());
+			case FAILED -> payment.recordFailure(status.description());
+			case STILL_PROCESSING -> {
+				if (payment.createdAt().isAfter(now.minus(PAYMENT_GIVE_UP))) {
+					return false; // ask again on the next run
+				}
+				LOG.log(Level.ERROR, "Payment {0} still unknown after {1}, giving up: {2}", payment.id(),
+						PAYMENT_GIVE_UP, status.description());
+				payment.expire();
+			}
+		}
+		return true;
 	}
 
 }

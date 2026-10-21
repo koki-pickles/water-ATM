@@ -12,7 +12,28 @@ public interface PaymentGatewayPort {
 	 */
 	String requestStkPush(StkPushRequest request);
 
+	/**
+	 * Asks the provider how a PIN prompt ended, for when its callback never arrives.
+	 * @throws PaymentGatewayException if the provider can't be reached
+	 */
+	StkStatus queryStatus(String checkoutRequestId);
+
 	record StkPushRequest(PhoneNumber phone, int amountKes, String accountReference, String description) {
+	}
+
+	record StkStatus(State state, String description) {
+
+		public enum State {
+
+			/** The customer paid. */
+			PAID,
+			/** Definitely not paid: cancelled, wrong PIN, no balance, no answer... */
+			FAILED,
+			/** The provider is still working on it: ask again later. */
+			STILL_PROCESSING
+
+		}
+
 	}
 
 	class PaymentGatewayException extends RuntimeException {

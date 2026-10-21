@@ -7,6 +7,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.nio.charset.StandardCharsets;
@@ -18,6 +19,7 @@ import java.util.Base64;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -25,6 +27,7 @@ import org.springframework.web.client.RestClient;
 
 import ke.wateratm.application.port.out.PaymentGatewayPort.PaymentGatewayException;
 import ke.wateratm.application.port.out.PaymentGatewayPort.StkPushRequest;
+import ke.wateratm.application.port.out.PaymentGatewayPort.StkStatus;
 import ke.wateratm.domain.model.PhoneNumber;
 
 /** Checks we speak Daraja's language correctly, against a fake Safaricom server. */
@@ -112,6 +115,53 @@ class DarajaPaymentGatewayTest {
 		safaricom.expect(requestTo(BASE + "/mpesa/stkpush/v1/processrequest")).andRespond(withServerError());
 
 		assertThatThrownBy(() -> gateway.requestStkPush(request())).isInstanceOf(PaymentGatewayException.class);
+	}
+
+	void expectQueryAnswer(org.springframework.test.web.client.ResponseCreator answer) {
+		expectToken();
+		safaricom.expect(requestTo(BASE + "/mpesa/stkpushquery/v1/query"))
+			.andExpect(method(HttpMethod.POST))
+			.andExpect(jsonPath("$.BusinessShortCode").value("174379"))
+			.andExpect(jsonPath("$.Password").value(base64("174379passkey20261021123000")))
+			.andExpect(jsonPath("$.CheckoutRequestID").value("ws_CO_1"))
+			.andRespond(answer);
+	}
+
+	@Test
+	void queryPaid() {
+		expectQueryAnswer(withSuccess("""
+				{"ResponseCode":"0","CheckoutRequestID":"ws_CO_1","ResultCode":"0",
+				 "ResultDesc":"The service request is processed successfully."}""", MediaType.APPLICATION_JSON));
+
+		assertThat(gateway.queryStatus("ws_CO_1").state()).isEqualTo(StkStatus.State.PAID);
+	}
+
+	@Test
+	void queryNoAnswerFromCustomer() {
+		// Exactly what the real sandbox answered on 21 Oct 2026
+		expectQueryAnswer(withSuccess("""
+				{"ResponseCode": "0","ResponseDescription":"The service request has been accepted successfully",
+				 "CheckoutRequestID":"ws_CO_1","ResultCode": "1037","ResultDesc":"No response from user."}""",
+				MediaType.APPLICATION_JSON));
+
+		StkStatus status = gateway.queryStatus("ws_CO_1");
+		assertThat(status.state()).isEqualTo(StkStatus.State.FAILED);
+		assertThat(status.description()).isEqualTo("No response from user.");
+	}
+
+	@Test
+	void queryStillProcessing() {
+		expectQueryAnswer(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).contentType(MediaType.APPLICATION_JSON).body("""
+				{"requestId":"1","errorCode":"500.001.1001","errorMessage":"The transaction is being processed"}"""));
+
+		assertThat(gateway.queryStatus("ws_CO_1").state()).isEqualTo(StkStatus.State.STILL_PROCESSING);
+	}
+
+	@Test
+	void queryOtherErrorIsGatewayException() {
+		expectQueryAnswer(withServerError());
+
+		assertThatThrownBy(() -> gateway.queryStatus("ws_CO_1")).isInstanceOf(PaymentGatewayException.class);
 	}
 
 	static String base64(String s) {

@@ -85,6 +85,17 @@ public class Payment {
 		finish(PaymentStatus.FAILED, reason);
 	}
 
+	/**
+	 * A payment confirmed by a status query has no receipt number (the query doesn't return one).
+	 * If M-Pesa's callback turns up later, keep its receipt for the records.
+	 */
+	public void attachLateReceipt(String receipt) {
+		if (status == PaymentStatus.SUCCEEDED && mpesaReceipt == null && receipt != null) {
+			mpesaReceipt = receipt;
+			updatedAt = Instant.now();
+		}
+	}
+
 	public void expire() {
 		requirePending();
 		finish(PaymentStatus.EXPIRED, "No answer from M-Pesa in time");

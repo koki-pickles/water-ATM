@@ -129,12 +129,28 @@ public final class InMemoryAdapters {
 
 	}
 
-	/** Pretends to be M-Pesa: records every PIN prompt and returns ids ws_CO_1, ws_CO_2... */
+	/**
+	 * Pretends to be M-Pesa: records every PIN prompt and returns ids ws_CO_1, ws_CO_2...
+	 * Status queries answer {@link #statusAnswer} (default: nobody entered a PIN, like the real sandbox).
+	 */
 	public static class Gateway implements PaymentGatewayPort {
 
 		public final List<StkPushRequest> requests = new ArrayList<>();
 
+		public final List<String> statusQueries = new ArrayList<>();
+
+		public StkStatus statusAnswer = new StkStatus(StkStatus.State.FAILED, "No response from user.");
+
 		public boolean down;
+
+		@Override
+		public StkStatus queryStatus(String checkoutRequestId) {
+			statusQueries.add(checkoutRequestId);
+			if (down) {
+				throw new PaymentGatewayException("M-Pesa is down", null);
+			}
+			return statusAnswer;
+		}
 
 		@Override
 		public String requestStkPush(StkPushRequest request) {

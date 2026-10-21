@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import ke.wateratm.application.port.in.HandlePaymentResultUseCase.PaymentResult;
 import ke.wateratm.application.port.in.PlaceOrderUseCase.PlaceOrderCommand;
 import ke.wateratm.application.port.out.PaymentGatewayPort.PaymentGatewayException;
+import ke.wateratm.application.port.out.PaymentGatewayPort.StkStatus;
 import ke.wateratm.application.service.OrderService;
 import ke.wateratm.application.service.PaymentService;
 import ke.wateratm.domain.exception.PaymentNotAllowedException;
@@ -150,30 +151,121 @@ class PaymentServiceTest {
 		assertThat(payments.byId).isEmpty();
 	}
 
+	Instant minutesLater(int minutes) {
+		return Instant.now().plus(Duration.ofMinutes(minutes));
+	}
+
 	@Test
-	void expiresUnansweredPaymentsThenCancelsUnpaidOrders() {
+	void doesNotAskMpesaBeforeTheTimeout() {
+		service().requestPayment(order.id());
+
+		assertThat(serviceAt(minutesLater(1)).expireStale()).isZero();
+		assertThat(mpesa.statusQueries).isEmpty();
+	}
+
+	@Test
+	void lostPaidCallbackIsRescuedByAskingMpesa() {
+		Payment payment = service().requestPayment(order.id());
+		mpesa.statusAnswer = new StkStatus(StkStatus.State.PAID, "The service request is processed successfully.");
+
+		serviceAt(minutesLater(6)).expireStale();
+
+		assertThat(mpesa.statusQueries).containsExactly(payment.checkoutRequestId());
+		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.SUCCEEDED);
+		assertThat(orderStatus()).isEqualTo(OrderStatus.PAID);
+		assertThat(orders.byId.get(order.id()).deliveryCode()).matches("\\d{4}");
+	}
+
+	@Test
+	void lateCallbackAfterQueryAddsTheReceipt() {
+		Payment payment = service().requestPayment(order.id());
+		mpesa.statusAnswer = new StkStatus(StkStatus.State.PAID, "ok");
+		serviceAt(minutesLater(6)).expireStale();
+		assertThat(payments.byId.get(payment.id()).mpesaReceipt()).isNull();
+
+		service().handle(success(payment.checkoutRequestId(), 120));
+
+		assertThat(payments.byId.get(payment.id()).mpesaReceipt()).isEqualTo("SJK3ABC123");
+		assertThat(orderStatus()).isEqualTo(OrderStatus.PAID);
+	}
+
+	@Test
+	void noPinEnteredIsClosedWithMpesasReason() {
 		Payment payment = service().requestPayment(order.id());
 
-		assertThat(serviceAt(Instant.now().plus(Duration.ofMinutes(1))).expireStale()).isZero();
+		serviceAt(minutesLater(6)).expireStale();
 
-		serviceAt(Instant.now().plus(Duration.ofMinutes(6))).expireStale();
+		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.FAILED);
+		assertThat(payments.byId.get(payment.id()).resultDescription()).isEqualTo("No response from user.");
+		assertThat(orderStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+	}
+
+	@Test
+	void stillProcessingIsAskedAgainLater() {
+		Payment payment = service().requestPayment(order.id());
+		mpesa.statusAnswer = new StkStatus(StkStatus.State.STILL_PROCESSING, "The transaction is being processed");
+
+		serviceAt(minutesLater(6)).expireStale();
+		serviceAt(minutesLater(7)).expireStale();
+
+		assertThat(mpesa.statusQueries).hasSize(2);
+		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.PENDING);
+	}
+
+	@Test
+	void mpesaDownKeepsPaymentOpenAndOrderAlive() {
+		Payment payment = service().requestPayment(order.id());
+		mpesa.down = true;
+
+		serviceAt(minutesLater(31)).expireStale();
+
+		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.PENDING);
+		assertThat(orderStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+	}
+
+	@Test
+	void givesUpAfterAnHourOfNoAnswer() {
+		Payment payment = service().requestPayment(order.id());
+		mpesa.down = true;
+
+		serviceAt(minutesLater(61)).expireStale();
+
 		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.EXPIRED);
+		assertThat(orderStatus()).isEqualTo(OrderStatus.CANCELLED);
+	}
+
+	@Test
+	void unpaidOrderIsCancelledAfterThirtyMinutes() {
+		service().requestPayment(order.id());
+
+		serviceAt(minutesLater(6)).expireStale();
 		assertThat(orderStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
 
-		serviceAt(Instant.now().plus(Duration.ofMinutes(31))).expireStale();
+		serviceAt(minutesLater(31)).expireStale();
 		assertThat(orderStatus()).isEqualTo(OrderStatus.CANCELLED);
 	}
 
 	@Test
 	void moneyArrivingAfterOrderCancelledIsFlaggedForRefund() {
 		Payment payment = service().requestPayment(order.id());
-		serviceAt(Instant.now().plus(Duration.ofMinutes(31))).expireStale();
+		mpesa.down = true;
+		serviceAt(minutesLater(61)).expireStale();
 		assertThat(orderStatus()).isEqualTo(OrderStatus.CANCELLED);
 
 		service().handle(success(payment.checkoutRequestId(), 120));
 
 		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.LATE_NEEDS_REFUND);
 		assertThat(orderStatus()).isEqualTo(OrderStatus.CANCELLED);
+	}
+
+	@Test
+	void successWithoutAmountNeedsAHuman() {
+		Payment payment = service().requestPayment(order.id());
+
+		service().handle(new PaymentResult(payment.checkoutRequestId(), true, "SJK3ABC123", null, "ok"));
+
+		assertThat(payments.byId.get(payment.id()).status()).isEqualTo(PaymentStatus.AMOUNT_MISMATCH);
+		assertThat(orderStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
 	}
 
 	@Test

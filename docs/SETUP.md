@@ -17,7 +17,7 @@ cd backend
 ```
 
 The first run downloads Postgres for Docker (~110 MB), so it's slow once. You should see
-`Tests run: 71, Failures: 0` and `BUILD SUCCESS`.
+`Tests run: 83, Failures: 0` and `BUILD SUCCESS`.
 
 ## 3. Start the app
 
@@ -82,7 +82,8 @@ curl -X POST localhost:8080/api/orders -H 'Content-Type: application/json' \
 
    The sandbox can send real prompts to Safaricom numbers, but **no real money moves**. Without a
    Safaricom line, the prompt never arrives. M-Pesa then calls back with a timeout, and the payment
-   shows as FAILED. That still proves the whole round trip works.
+   shows as FAILED. That still proves the whole round trip works. If the callback never comes (the
+   sandbox sometimes skips it), the backend asks Safaricom itself after 5 minutes.
 
 > ⚠️ The orders API has **no login yet**. Never run it on a public server until Phase 3b adds login.
 

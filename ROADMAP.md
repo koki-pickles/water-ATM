@@ -468,13 +468,14 @@ gantt
 - [x] 🤖 Daraja OAuth token (cached) + STK Push request, as a `PaymentGatewayPort` adapter
 - [x] 🤖 Callback endpoint that is **idempotent** (same callback twice = paid once), protected by a secret URL
 - [x] 🤖 Row locking so a double tap or two callbacks at once can't double-pay
-- [x] 🤖 Timeout job: no answer in 5 min → payment expired; unpaid after 30 min → order cancelled
+- [x] 🤖 Timeout job: no callback in 5 min → ask Safaricom; unpaid after 30 min → order cancelled
 - [x] 🤖 Safety: wrong amount → held for review; money arriving after cancel → flagged for refund
 - [x] 🤖 Basic orders API (`POST /api/orders`, `POST /api/orders/{id}/payment`, `GET /api/orders/{id}`)
 - [x] 🤖 Keys in a private `backend/.env` file + cloudflared tunnel installed
 - [x] 🤝 First real sandbox test (21 Oct): Safaricom accepted the STK push; no callback came for the
       unanswered prompt (sandbox result 1037 "No response from user"); expiry job closed it after 5 min
-- [ ] 🤖 **Before expiring, ask Safaricom (STK Query API)**: a lost "paid" callback must never cancel a paid order
+- [x] 🤖 **Before expiring, ask Safaricom (STK Query API)**: a lost "paid" callback can no longer cancel a paid order.
+      Still processing / M-Pesa unreachable → ask again every minute, give up only after 1 hour
 - [ ] 🤝 Test with a real Safaricom number (PIN prompt on a phone)
 
 ### Phase 3a: WhatsApp bot *(weeks 2–3, parallel)*
